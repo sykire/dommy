@@ -1,7 +1,7 @@
 import type { Component, View } from "./types"
 
 export function isComponent(arg: any): arg is Component {
-  return arg.view
+  return arg?.view
 }
 
 export function isElement(arg: any): arg is Element {
@@ -17,7 +17,7 @@ export function isSVGElement(arg: any): arg is SVGElement {
 }
 
 export function isNode(arg: any): arg is Node {
-  return typeof arg.nodeType === "number"
+  return typeof arg?.nodeType === "number"
 }
 
 export function getNode(view: View): Node {

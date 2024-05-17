@@ -35,7 +35,7 @@ export function h(
 
   let _children = [...children]
 
-  if (children.length && isChild(properties)) {
+  if (children.length != null && typeof children !== "string" && isChild(properties)) {
     _children.unshift(properties)
     properties = {}
   }

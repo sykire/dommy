@@ -1,48 +1,60 @@
 import {
-  Mounted,
-  Node_Component,
-  Node_HooksCounter,
   createHooksCounter,
   deleteHooksCOunter,
   getHooksCounter,
+  getNodeComponent,
   hookNames,
   isMounted,
+  setMounted,
+  setNodeComponent,
 } from "./internal"
-import { Component, Hook, View } from "./types"
-import { getNode, isComponent, isElement } from "./utils"
+import { Hook, View } from "./types"
+import { getNode, isComponent } from "./utils"
 
 // This is the function that does the heavy job, the starting point
-export function mount(parent: View, child: View) {
-  const parentEl = getNode(parent)
-  let childEl!: Node
-  let childComp!: Component
+export function mount(parent: View, child: View, before?: View, replace = false): View {
+  const parentNode = getNode(parent)
+  let childNode: Node = getNode(child)
 
-  if (isElement(child)) {
-    const component = Node_Component.get(child)
-    childEl = child
+  if (child === childNode) {
+    const component = getNodeComponent(child)
+
     if (component != null) {
-      childComp = component
+      child = component
     }
-  } else if (isComponent(child)) {
-    childEl = getNode(child)
-    childComp = child
-    Node_Component.set(childEl, child)
   }
 
-  const wasMounted = Mounted.has(childEl)
-  const oldParent = childEl.parentNode ?? undefined
-
-  if (wasMounted && oldParent !== parentEl) {
-    doUnmount(childEl, oldParent)
+  if (child !== childNode && isComponent(child)) {
+    setNodeComponent(childNode, child)
   }
 
-  parentEl.appendChild(childEl)
+  const wasMounted = isMounted(childNode)
+  const oldParent = childNode.parentNode ?? undefined
+
+  if (wasMounted && oldParent !== parentNode) {
+    doUnmount(childNode, oldParent)
+  }
+
+  if (before != null) {
+    const beforeNode = getNode(before)
+    if (replace) {
+      if (isMounted(beforeNode)) {
+        trigger(beforeNode, Hook.unmount, {})
+      }
+
+      parentNode.replaceChild(childNode, beforeNode)
+    } else {
+      parentNode.insertBefore(childNode, beforeNode)
+    }
+  } else {
+    parentNode.appendChild(childNode)
+  }
 
   // doMount(child, childEl, parentEl, oldParent)
   // This is the code of doMount
-  const remount = parentEl === oldParent
+  const remount = parentNode === oldParent
 
-  let hooksCounter = getHooksCounter(childEl) ?? createHooksCounter(childEl)
+  let hooksCounter = getHooksCounter(childNode) ?? createHooksCounter(childNode)
   let hooksFound = false
 
   for (const hookName of hookNames) {
@@ -64,62 +76,61 @@ export function mount(parent: View, child: View) {
   }
 
   if (!hooksFound) {
-    Node_HooksCounter.set(childEl, createHooksCounter())
-    return
-  }
+    createHooksCounter(childNode)
+  } else {
+    let traverse = parentNode
+    let triggered = false
 
-  let traverse = parentEl
-  let triggered = false
-
-  if (remount || isMounted(parentEl)) {
-    trigger(childEl, Hook.mount, { isRemount: remount })
-    triggered = true
-  }
-
-  while (traverse) {
-    // starting from the mount point(parentEl)
-    const parent = traverse.parentNode
-
-    if (parent == null) {
-      break
+    if (remount || isMounted(parentNode)) {
+      trigger(childNode, Hook.mount, { isRemount: remount })
+      triggered = true
     }
 
-    const parentHooks = getHooksCounter(parentEl) ?? createHooksCounter(parentEl)
+    while (traverse) {
+      // starting from the mount point(parentEl)
+      const parent = traverse.parentNode
 
-    for (const hookName of hookNames) {
-      parentHooks[hookName] += hooksCounter[hookName] // Incrementing up the tree the count of hooks
-    }
-
-    if (triggered) {
-      break
-    } else {
-      if (traverse.nodeType === Node.DOCUMENT_NODE || traverse instanceof ShadowRoot || isMounted(parent)) {
-        trigger(traverse, Hook.mount, { isRemount: remount })
+      if (parent == null) {
+        break
       }
-    }
 
-    traverse = parent
+      const parentHooks = getHooksCounter(parentNode) ?? createHooksCounter(parentNode)
+
+      for (const hookName of hookNames) {
+        parentHooks[hookName] += hooksCounter[hookName] // Incrementing up the tree the count of hooks
+      }
+
+      if (triggered) {
+        break
+      } else {
+        if (traverse.nodeType === Node.DOCUMENT_NODE || traverse instanceof ShadowRoot || isMounted(parent)) {
+          trigger(traverse, Hook.mount, { isRemount: remount })
+        }
+      }
+
+      traverse = parent
+    }
   }
 
-  return childComp
+  return child
 }
 
-export function trigger(el: Node, eventName: Hook, details: any) {
+export function trigger(node: Node, eventName: Hook, details: any) {
   switch (eventName) {
     case Hook.mount:
-      Mounted.add(el)
+      setMounted(node, true)
       break
     case Hook.unmount:
-      Mounted.delete(el)
+      setMounted(node, false)
   }
 
-  const hooksCounter = getHooksCounter(el)
+  const hooksCounter = getHooksCounter(node)
 
   if (hooksCounter == null) {
     return
   }
 
-  const component = Node_Component.get(el)
+  const component = getNodeComponent(node)
   let hooksFound = false
 
   component?.[eventName]?.(details)
@@ -132,7 +143,7 @@ export function trigger(el: Node, eventName: Hook, details: any) {
   }
 
   if (hooksFound) {
-    let traverse: ChildNode | null = el.firstChild
+    let traverse: ChildNode | null = node.firstChild
 
     if (traverse == null) {
       return
@@ -211,7 +222,7 @@ export function unmount(parent: View, child: View): View {
   const childNode = getNode(child)
 
   if (child === childNode) {
-    const component = Node_Component.get(child)
+    const component = getNodeComponent(child)
     if (component != null) {
       child = component
     }

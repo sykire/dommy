@@ -29,7 +29,6 @@ export function createElement(query: string, properties?: Properties, ns?: strin
   }
 
   if (properties) {
-    console.log(properties)
     for (const property in properties) {
       switch (property) {
         case "middleware":
@@ -56,7 +55,6 @@ export function createElement(query: string, properties?: Properties, ns?: strin
           break
         case "style":
           const style = properties[property]
-          console.log("asd")
 
           if (style && (isHTMLElement(element) || isSVGElement(element))) {
             for (const key in style) {

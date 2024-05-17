@@ -1,12 +1,15 @@
 import { ensureNode } from "./createElement"
-import { setId } from "./internal"
+import { deleteComponent, getId, setId, setIndex, setNodeComponent } from "./internal"
+import { unmount } from "./mounting"
+import { setChildren } from "./setChildren"
 import { Component, ListComponent, ListItemComponent, ListItemFactory, View } from "./types"
+import { getNode } from "./utils"
 
-export function List<Data = any, Context = any>(
-  parent: View,
+export function List<Data extends Record<string, any> = any, Context = any>(
+  parent: string | View,
   itemFactory: ListItemFactory<Data, Context>,
-  key: string | ((data: Data) => string),
-  initialData: Data
+  key?: string | ((data: Data) => string),
+  initialData?: Data
 ): ListComponent<Data, Context> {
   const view = ensureNode(parent)
   let components: Component[] = []
@@ -16,30 +19,27 @@ export function List<Data = any, Context = any>(
   // this.pool = new ListPool(View, key, initData);
 
   let keyFn =
-    typeof key === "function"
-      ? key
-      : typeof key === "string"
-      ? (item: Data) => Object.prototype.toString.call(item[key])
-      : undefined
+    typeof key === "function" ? key : typeof key === "string" ? (item: Data) => item[key].toString() : undefined
 
-  return {
+  let thisComponent = {
     get view() {
       return view
     },
-    update(data: Data[], context: Context) {
+    update(data: Data[], context?: Context) {
+      const oldComponents = components
 
       // start this.pool.update(data, context)
-      const newLookup : Record<string, Component> = {}
-      const newComponents : Component[] = []
+      const newLookup: Record<string, Component> = {}
+      const newComponents: Component[] = []
 
-      for(let i = 0, i < data.length; i++) {
+      for (let i = 0; i < data.length; i++) {
         const itemData = data[i]
-        
-        let newComponent : ListItemComponent
 
-        if(keyFn) {
+        let newComponent: ListItemComponent
+
+        if (keyFn) {
           const id = keyFn(itemData)
-
+          console.log(id)
           newComponent = lookup[id] ?? itemFactory()
           newLookup[id] = newComponent
           setId(newComponent, id)
@@ -47,12 +47,41 @@ export function List<Data = any, Context = any>(
           newComponent = components[i] ?? itemFactory()
         }
 
-        newComponent.
+        newComponent.update?.(data[i], i, data, context)
+
+        newComponent.data = data[i]
+
+        const node = getNode(newComponent)
+
+        setNodeComponent(node, newComponent)
+
+        newComponents[i] = newComponent
+        console.log(newComponents.map(c => c.data))
       }
-      
       // end
 
+      if (keyFn) {
+        for (let i = 0; i < oldComponents.length; i++) {
+          const oldComponent = oldComponents[i]
+          const id = getId(oldComponent)
 
+          if (!id || newLookup[id] == null) {
+            deleteComponent(oldComponent)
+            unmount(thisComponent, oldComponent)
+          }
+        }
+      }
+
+      for (let i = 0; i < newComponents.length; i++) {
+        setIndex(newComponents[i], i)
+      }
+
+      setChildren(thisComponent, ...newComponents)
+
+      lookup = newLookup
+      components = newComponents
     },
-  }
+  } satisfies ListComponent<Data, Context>
+
+  return thisComponent
 }

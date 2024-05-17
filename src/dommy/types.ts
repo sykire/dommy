@@ -19,7 +19,7 @@ export interface Component {
 }
 
 export interface ListComponent<Data = any, Context = any> extends Component {
-  update?: (data: Data[], context: Context) => void
+  update?: (data: Data[], context?: Context) => void
 }
 
 export interface ListItemComponent<Data = any, Context = any> extends Component {
